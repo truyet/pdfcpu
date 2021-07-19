@@ -1293,6 +1293,8 @@ func readXRefTable(ctx *Context) (err error) {
 		return
 	}
 
+	ctx.Write.OffsetPrevXRef = offset
+
 	err = buildXRefTableStartingAt(ctx, offset)
 	if err == io.EOF {
 		return errors.Wrap(err, "readXRefTable: unexpected eof")
@@ -1469,7 +1471,7 @@ func keywordStreamRightAfterEndOfDict(buf string, streamInd int) bool {
 	return ok
 }
 
-func buildFilterPipeline(ctx *Context, filterArray, decodeParmsArr Array, decodeParms Object) ([]PDFFilter, error) {
+func buildFilterPipeline(ctx *Context, filterArray, decodeParmsArr Array) ([]PDFFilter, error) {
 
 	var filterPipeline []PDFFilter
 
@@ -1479,7 +1481,7 @@ func buildFilterPipeline(ctx *Context, filterArray, decodeParmsArr Array, decode
 		if !ok {
 			return nil, errors.New("pdfcpu: buildFilterPipeline: filterArray elements corrupt")
 		}
-		if decodeParms == nil || decodeParmsArr[i] == nil {
+		if decodeParmsArr == nil || decodeParmsArr[i] == nil {
 			filterPipeline = append(filterPipeline, PDFFilter{Name: filterName.Value(), DecodeParms: nil})
 			continue
 		}
@@ -1572,14 +1574,14 @@ func pdfFilterPipeline(ctx *Context, dict Dict) ([]PDFFilter, error) {
 	decodeParms, found := dict.Find("DecodeParms")
 	if found {
 		decodeParmsArr, ok = decodeParms.(Array)
-		if !ok {
+		if !ok || len(decodeParmsArr) != len(filterArray) {
 			return nil, errors.New("pdfcpu: pdfFilterPipeline: expected decodeParms array corrupt")
 		}
 	}
 
 	//fmt.Printf("decodeParmsArr: %s\n", decodeParmsArr)
 
-	filterPipeline, err = buildFilterPipeline(ctx, filterArray, decodeParmsArr, decodeParms)
+	filterPipeline, err = buildFilterPipeline(ctx, filterArray, decodeParmsArr)
 
 	log.Read.Println("pdfFilterPipeline: end")
 
@@ -1991,6 +1993,10 @@ func saveDecodedStreamContent(ctx *Context, sd *StreamDict, objNr, genNr int, de
 	}
 
 	if !decode {
+		return nil
+	}
+
+	if sd.Image() {
 		return nil
 	}
 

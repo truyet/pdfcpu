@@ -45,6 +45,7 @@ type Command struct {
 	StringMap      map[string]string
 	Box            *pdfcpu.Box
 	PageBoundaries *pdfcpu.PageBoundaries
+	IntVals        []int
 }
 
 var cmdMap = map[pdfcpu.CommandMode]func(cmd *Command) ([]string, error){
@@ -94,6 +95,9 @@ var cmdMap = map[pdfcpu.CommandMode]func(cmd *Command) ([]string, error){
 	pdfcpu.ADDBOXES:                processPageBoundaries,
 	pdfcpu.REMOVEBOXES:             processPageBoundaries,
 	pdfcpu.CROP:                    processPageBoundaries,
+	pdfcpu.LISTANNOTATIONS:         processPageAnnotations,
+	pdfcpu.REMOVEANNOTATIONS:       processPageAnnotations,
+	pdfcpu.LISTIMAGES:              processImages,
 }
 
 // ValidateCommand creates a new command to validate a file.
@@ -715,5 +719,46 @@ func CropCommand(inFile, outFile string, pageSelection []string, box *pdfcpu.Box
 		OutFile:       &outFile,
 		PageSelection: pageSelection,
 		Box:           box,
+		Conf:          conf}
+}
+
+// ListAnnotationsCommand creates a new command to list annotations for selected pages.
+func ListAnnotationsCommand(inFile string, pageSelection []string, conf *pdfcpu.Configuration) *Command {
+	if conf == nil {
+		conf = pdfcpu.NewDefaultConfiguration()
+	}
+	conf.Cmd = pdfcpu.LISTANNOTATIONS
+	return &Command{
+		Mode:          pdfcpu.LISTANNOTATIONS,
+		InFile:        &inFile,
+		PageSelection: pageSelection,
+		Conf:          conf}
+}
+
+// RemoveAnnotationsCommand creates a new command to remove annotations for selected pages.
+func RemoveAnnotationsCommand(inFile, outFile string, pageSelection []string, objNrs []int, conf *pdfcpu.Configuration) *Command {
+	if conf == nil {
+		conf = pdfcpu.NewDefaultConfiguration()
+	}
+	conf.Cmd = pdfcpu.REMOVEANNOTATIONS
+	return &Command{
+		Mode:          pdfcpu.REMOVEANNOTATIONS,
+		InFile:        &inFile,
+		OutFile:       &outFile,
+		PageSelection: pageSelection,
+		IntVals:       objNrs,
+		Conf:          conf}
+}
+
+// ListImagesCommand creates a new command to list annotations for selected pages.
+func ListImagesCommand(inFile string, pageSelection []string, conf *pdfcpu.Configuration) *Command {
+	if conf == nil {
+		conf = pdfcpu.NewDefaultConfiguration()
+	}
+	conf.Cmd = pdfcpu.LISTIMAGES
+	return &Command{
+		Mode:          pdfcpu.LISTIMAGES,
+		InFile:        &inFile,
+		PageSelection: pageSelection,
 		Conf:          conf}
 }

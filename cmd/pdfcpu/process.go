@@ -45,10 +45,6 @@ func ensurePdfExtension(filename string) {
 	}
 }
 
-func defaultFilenameOut(filename string) string {
-	return filename[:len(filename)-4] + "_new.pdf"
-}
-
 func printHelp(conf *pdfcpu.Configuration) {
 	switch len(flag.Args()) {
 
@@ -219,15 +215,13 @@ func processMergeCommand(conf *pdfcpu.Configuration) {
 			fmt.Fprintf(os.Stderr, "%s may appear as inFile or outFile only\n", outFile)
 			os.Exit(1)
 		}
-		if strings.Index(arg, "*") >= 0 {
-			f, err := filepath.Glob(arg)
+		if strings.Contains(arg, "*") {
+			matches, err := filepath.Glob(arg)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s", err)
 				os.Exit(1)
 			}
-			for _, f := range f {
-				filesIn = append(filesIn, f)
-			}
+			filesIn = append(filesIn, matches...)
 			continue
 		}
 		filesIn = append(filesIn, arg)
@@ -358,16 +352,15 @@ func processAddAttachmentsCommand(conf *pdfcpu.Configuration) {
 		if i == 0 {
 			inFile = arg
 			ensurePdfExtension(inFile)
-			if strings.Index(arg, "*") >= 0 {
-				f, err := filepath.Glob(arg)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "%s", err)
-					os.Exit(1)
-				}
-				for _, f := range f {
-					fileNames = append(fileNames, f)
-				}
+			continue
+		}
+		if strings.Contains(arg, "*") {
+			matches, err := filepath.Glob(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
+				os.Exit(1)
 			}
+			fileNames = append(fileNames, matches...)
 			continue
 		}
 		fileNames = append(fileNames, arg)
@@ -389,16 +382,15 @@ func processAddAttachmentsPortfolioCommand(conf *pdfcpu.Configuration) {
 		if i == 0 {
 			inFile = arg
 			ensurePdfExtension(inFile)
-			if strings.Index(arg, "*") >= 0 {
-				f, err := filepath.Glob(arg)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "%s", err)
-					os.Exit(1)
-				}
-				for _, f := range f {
-					fileNames = append(fileNames, f)
-				}
+			continue
+		}
+		if strings.Contains(arg, "*") {
+			matches, err := filepath.Glob(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
+				os.Exit(1)
 			}
+			fileNames = append(fileNames, matches...)
 			continue
 		}
 		fileNames = append(fileNames, arg)
@@ -820,6 +812,28 @@ func ensureImageExtension(filename string) {
 	}
 }
 
+func parseArgsForImageFileNames(startInd int) []string {
+	imageFileNames := []string{}
+	for i := startInd; i < len(flag.Args()); i++ {
+		arg := flag.Arg(i)
+		if strings.Contains(arg, "*") {
+			matches, err := filepath.Glob(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				os.Exit(1)
+			}
+			for _, fn := range matches {
+				ensureImageExtension(fn)
+				imageFileNames = append(imageFileNames, fn)
+			}
+			continue
+		}
+		ensureImageExtension(arg)
+		imageFileNames = append(imageFileNames, arg)
+	}
+	return imageFileNames
+}
+
 func processImportImagesCommand(conf *pdfcpu.Configuration) {
 	if len(flag.Args()) < 2 || selectedPages != "" {
 		fmt.Fprintf(os.Stderr, "%s\n\n", usageImportImages)
@@ -833,12 +847,7 @@ func processImportImagesCommand(conf *pdfcpu.Configuration) {
 	if hasPdfExtension(outFile) {
 		// pdfcpu import outFile imageFile...
 		imp := pdfcpu.DefaultImportConfig()
-		imageFileNames := []string{}
-		for i := 1; i < len(flag.Args()); i++ {
-			arg := flag.Arg(i)
-			ensureImageExtension(arg)
-			imageFileNames = append(imageFileNames, arg)
-		}
+		imageFileNames := parseArgsForImageFileNames(1)
 		process(cli.ImportImagesCommand(imageFileNames, outFile, imp, conf))
 	}
 
@@ -855,14 +864,7 @@ func processImportImagesCommand(conf *pdfcpu.Configuration) {
 
 	outFile = flag.Arg(1)
 	ensurePdfExtension(outFile)
-
-	imageFileNames := []string{}
-	for i := 2; i < len(flag.Args()); i++ {
-		arg := flag.Args()[i]
-		ensureImageExtension(arg)
-		imageFileNames = append(imageFileNames, arg)
-	}
-
+	imageFileNames := parseArgsForImageFileNames(2)
 	process(cli.ImportImagesCommand(imageFileNames, outFile, imp, conf))
 }
 
@@ -1203,9 +1205,7 @@ func processInstallFontsCommand(conf *pdfcpu.Configuration) {
 func processCreateCheatSheetFontsCommand(conf *pdfcpu.Configuration) {
 	fileNames := []string{}
 	if len(flag.Args()) > 0 {
-		for _, arg := range flag.Args() {
-			fileNames = append(fileNames, arg)
-		}
+		fileNames = append(fileNames, flag.Args()...)
 	}
 	process(cli.CreateCheatSheetsFontsCommand(fileNames, conf))
 }
@@ -1487,4 +1487,71 @@ func processCropCommand(conf *pdfcpu.Configuration) {
 	}
 
 	process(cli.CropCommand(inFile, outFile, selectedPages, box, conf))
+}
+
+func processListAnnotationsCommand(conf *pdfcpu.Configuration) {
+	if len(flag.Args()) != 1 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", usageAnnotsList)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(0)
+	ensurePdfExtension(inFile)
+
+	selectedPages, err := api.ParsePageSelection(selectedPages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem with flag selectedPages: %v\n", err)
+		os.Exit(1)
+	}
+
+	process(cli.ListAnnotationsCommand(inFile, selectedPages, conf))
+}
+func processRemoveAnnotationsCommand(conf *pdfcpu.Configuration) {
+	if len(flag.Args()) < 1 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", usageAnnotsRemove)
+		os.Exit(1)
+	}
+
+	selectedPages, err := api.ParsePageSelection(selectedPages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem with flag selectedPages: %v\n", err)
+		os.Exit(1)
+	}
+
+	inFile := ""
+	objNrs := []int{}
+
+	for i, arg := range flag.Args() {
+		if i == 0 {
+			inFile = arg
+			ensurePdfExtension(inFile)
+			continue
+		}
+		i, err := strconv.Atoi(arg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "objNr has to be a positiv numeric value")
+			os.Exit(1)
+		}
+		objNrs = append(objNrs, i)
+	}
+
+	process(cli.RemoveAnnotationsCommand(inFile, "", selectedPages, objNrs, conf))
+}
+
+func processListImagesCommand(conf *pdfcpu.Configuration) {
+	if len(flag.Args()) != 1 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", usageImagesList)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(0)
+	ensurePdfExtension(inFile)
+
+	selectedPages, err := api.ParsePageSelection(selectedPages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem with flag selectedPages: %v\n", err)
+		os.Exit(1)
+	}
+
+	process(cli.ListImagesCommand(inFile, selectedPages, conf))
 }
